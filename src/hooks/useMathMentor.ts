@@ -56,13 +56,13 @@ export function useMathMentor() {
     }));
   }, []);
 
-  const simulateAgentRun = async (type: AgentType, duration: number, message?: string) => {
+  const simulateAgentRun = useCallback(async (type: AgentType, duration: number, message?: string) => {
     const startTime = Date.now();
     updateAgent(type, { status: "running", startTime, message });
     await new Promise((r) => setTimeout(r, duration));
     const endTime = Date.now();
     updateAgent(type, { status: "completed", endTime, message: message || "Completed" });
-  };
+  }, [updateAgent]);
 
   const solveProblem = useCallback(async (input: string) => {
     setState((prev) => ({
@@ -116,7 +116,7 @@ export function useMathMentor() {
     } finally {
       setState((prev) => ({ ...prev, isProcessing: false }));
     }
-  }, []);
+  }, [simulateAgentRun, updateAgent]);
 
   const processImage = useCallback(async (file: File) => {
     setState((prev) => ({ ...prev, isProcessing: true }));
