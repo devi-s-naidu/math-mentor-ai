@@ -1,73 +1,197 @@
-# Welcome to your Lovable project
+# 🧠 Multimodal Math Mentor (RAG + Agents + HITL + Memory)
 
-## Project info
+An end-to-end AI application that reliably solves **JEE-style math problems** from **text, image, or audio inputs**, explains solutions step-by-step, verifies correctness, and **improves over time using memory and human feedback**.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+---
 
-## How can I edit this code?
+## 🚀 Features
 
-There are several ways of editing your application.
+* **Multimodal Input**: Text, Image (OCR), and Audio (ASR)
+* **Parser Agent**: Converts raw input into structured math problems
+* **RAG Pipeline**: Uses a curated math knowledge base (formulas, templates, pitfalls)
+* **Multi-Agent System**: Modular agents for solving, verifying, and explaining
+* **Human-in-the-Loop (HITL)**: Triggered on low confidence or ambiguity
+* **Memory & Self-Learning**: Reuses past solutions and corrections
+* **Transparent UI**: Shows agent trace, retrieved context, and confidence
+* **Deployed App**: Accessible via public URL
 
-**Use Lovable**
+---
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## 🧩 Supported Math Scope
 
-Changes made via Lovable will be committed automatically to this repo.
+* Algebra
+* Probability
+* Basic Calculus (limits, derivatives, optimization)
+* Linear Algebra (basics)
 
-**Use your preferred IDE**
+*(JEE-level difficulty, non-olympiad)*
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+---
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## 🏗️ System Architecture
 
-Follow these steps:
+**High-level flow:**
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+1. Input (Text / Image / Audio)
+2. OCR / ASR Processing
+3. Parser Agent (structure + ambiguity check)
+4. Intent Router Agent
+5. RAG Retrieval (Vector DB)
+6. Solver Agent (with tools)
+7. Verifier / Critic Agent
+8. Explainer / Tutor Agent
+9. HITL (if required)
+10. Memory Storage & Reuse
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+> Architecture diagram is provided in the repository (`architecture.mmd`).
 
-# Step 3: Install the necessary dependencies.
-npm i
+---
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+## 🤖 Agents Overview
+
+| Agent           | Responsibility                          |
+| --------------- | --------------------------------------- |
+| Parser Agent    | Cleans and structures the problem       |
+| Intent Router   | Classifies problem type and routes flow |
+| Solver Agent    | Solves using RAG + tools (Python)       |
+| Verifier Agent  | Checks correctness, domains, edge cases |
+| Explainer Agent | Produces step-by-step explanation       |
+
+---
+
+## 📚 RAG Pipeline
+
+* **Knowledge Base**: 10–30 curated math documents
+* **Chunking & Embeddings**
+* **Vector Store**: FAISS / Chroma
+* **Top-k Retrieval**
+* **No hallucinated citations** if retrieval fails
+
+Retrieved sources are shown directly in the UI.
+
+---
+
+## 🧠 Memory & Learning
+
+Stored per interaction:
+
+* Original input (text/image/audio)
+* Parsed problem
+* Retrieved context
+* Final solution
+* Verifier confidence
+* User feedback
+
+Used at runtime to:
+
+* Retrieve similar solved problems
+* Reuse solution strategies
+* Apply OCR / ASR correction patterns
+
+---
+
+## 🧑‍⚖️ Human-in-the-Loop (HITL)
+
+Triggered when:
+
+* OCR / ASR confidence is low
+* Parser detects ambiguity
+* Verifier is unsure
+* User requests re-check
+
+Human can **edit, approve, or reject** solutions. Corrections are saved as learning signals.
+
+---
+
+## 🖥️ Application UI
+
+Built with **Streamlit**.
+
+Includes:
+
+* Input mode selector (Text / Image / Audio)
+* OCR / Transcript preview & edit
+* Agent execution trace
+* Retrieved context panel
+* Final answer & explanation
+* Confidence indicator
+* Feedback buttons (✅ Correct / ❌ Incorrect)
+
+---
+
+## ⚙️ Tech Stack
+
+* **Frontend**: Streamlit
+* **LLM**: OpenAI / compatible LLM
+* **OCR**: Tesseract / PaddleOCR
+* **ASR**: Whisper
+* **Vector DB**: FAISS / Chroma
+* **Embeddings**: Sentence Transformers / OpenAI
+* **Storage**: Local JSON / SQLite
+
+---
+
+## 🛠️ Setup & Run Locally
+
+```bash
+# Clone repository
+git clone https://github.com/your-username/multimodal-math-mentor.git
+cd multimodal-math-mentor
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Add environment variables
+cp .env.example .env
+
+# Run app
+streamlit run app.py
 ```
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 🌐 Deployment
 
-**Use GitHub Codespaces**
+Deployed on **Streamlit Cloud / HuggingFace Spaces**.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+🔗 **Live App**: *Add deployed link here*
 
-## What technologies are used for this project?
+---
 
-This project is built with:
+## 🎥 Demo Video
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+3–5 minute demo covering:
 
-## How can I deploy this project?
+* Image → Solution
+* Audio → Solution
+* HITL workflow
+* Memory reuse on similar problem
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+🔗 *Add video link here*
 
-## Can I connect a custom domain to my Lovable project?
+---
 
-Yes, you can!
+## 📦 Deliverables Checklist
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+* [x] GitHub Repository
+* [x] README
+* [x] Architecture Diagram
+* [x] Deployed App Link
+* [x] Demo Video
+* [x] Evaluation Summary
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+---
+
+## 📄 License
+
+MIT License
+
+---
+
+## 🙌 Acknowledgements
+
+Built as part of **AI Engineer Assignment – AI Planet** to demonstrate reliable, explainable, and adaptive AI systems.
