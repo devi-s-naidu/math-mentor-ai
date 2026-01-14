@@ -1,13 +1,13 @@
 import { useState, useCallback } from "react";
 import {
-  AppState,
-  InputMode,
-  AgentState,
-  AgentType,
-  ParsedProblem,
-  Solution,
-  HITLRequest,
-  MemoryEntry,
+  type AppState,
+  type InputMode,
+  type AgentState,
+  type AgentType,
+  type ParsedProblem,
+  type Solution,
+  type HITLRequest,
+  type MemoryEntry,
 } from "@/types/mathMentor";
 import { toast } from "@/hooks/use-toast";
 
