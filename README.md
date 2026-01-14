@@ -2,6 +2,7 @@
 
 An end-to-end AI application that reliably solves **JEE-style math problems** from **text, image, or audio inputs**, explains solutions step-by-step, verifies correctness, and **improves over time using memory and human feedback**.
 
+**url:** https://clever-num-mentor.lovable.app/
 ---
 
 ## 🚀 Features
