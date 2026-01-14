@@ -2,7 +2,7 @@
 
 An end-to-end AI application that reliably solves **JEE-style math problems** from **text, image, or audio inputs**, explains solutions step-by-step, verifies correctness, and **improves over time using memory and human feedback**.
 
-**url:** https://clever-num-mentor.lovable.app/
+* **url:** https://clever-num-mentor.lovable.app/
 ---
 
 ## 🚀 Features
@@ -152,47 +152,3 @@ cp .env.example .env
 # Run app
 streamlit run app.py
 ```
-
----
-
-## 🌐 Deployment
-
-Deployed on **Streamlit Cloud / HuggingFace Spaces**.
-
-🔗 **Live App**: *Add deployed link here*
-
----
-
-## 🎥 Demo Video
-
-3–5 minute demo covering:
-
-* Image → Solution
-* Audio → Solution
-* HITL workflow
-* Memory reuse on similar problem
-
-🔗 *Add video link here*
-
----
-
-## 📦 Deliverables Checklist
-
-* [x] GitHub Repository
-* [x] README
-* [x] Architecture Diagram
-* [x] Deployed App Link
-* [x] Demo Video
-* [x] Evaluation Summary
-
----
-
-## 📄 License
-
-MIT License
-
----
-
-## 🙌 Acknowledgements
-
-Built as part of **AI Engineer Assignment – AI Planet** to demonstrate reliable, explainable, and adaptive AI systems.
