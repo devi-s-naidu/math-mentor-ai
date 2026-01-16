@@ -10,6 +10,7 @@ import {
   type MemoryEntry,
 } from "@/types/mathMentor";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const initialAgents: AgentState[] = [
   { type: "parser", status: "idle" },
@@ -121,47 +122,103 @@ export function useMathMentor() {
   const processImage = useCallback(async (file: File) => {
     setState((prev) => ({ ...prev, isProcessing: true }));
     
-    // Simulate OCR processing
-    await new Promise((r) => setTimeout(r, 1500));
-    
-    // Simulated OCR result
-    const extractedText = "Find the derivative of f(x) = x³ + 2x² - 5x + 3";
-    const confidence = 0.87;
-    
-    setState((prev) => ({
-      ...prev,
-      extractedText,
-      isProcessing: false,
-    }));
+    try {
+      // Convert image to base64
+      const reader = new FileReader();
+      const imageBase64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
 
-    if (confidence < 0.7) {
+      // Call OCR edge function
+      const { data, error } = await supabase.functions.invoke('ocr-extract', {
+        body: { imageBase64 }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      const extractedText = data.extractedText || '';
+      const confidence = data.confidence || 0.5;
+
       setState((prev) => ({
         ...prev,
-        hitlRequest: {
-          id: crypto.randomUUID(),
-          type: "ocr-correction",
-          originalContent: extractedText,
-          message: "The OCR confidence is low. Please review and correct the extracted text.",
-          resolved: false,
-        },
+        extractedText,
+        isProcessing: false,
       }));
+
+      if (confidence < 0.7) {
+        setState((prev) => ({
+          ...prev,
+          hitlRequest: {
+            id: crypto.randomUUID(),
+            type: "ocr-correction",
+            originalContent: extractedText,
+            message: "The OCR confidence is low. Please review and correct the extracted text.",
+            resolved: false,
+          },
+        }));
+      }
+
+      toast({
+        title: "Image processed",
+        description: "Text extracted successfully. Review and confirm.",
+      });
+    } catch (error) {
+      console.error('OCR error:', error);
+      toast({
+        title: "OCR Failed",
+        description: "Could not extract text from image. Please try again.",
+        variant: "destructive",
+      });
+      setState((prev) => ({ ...prev, isProcessing: false }));
     }
   }, []);
 
   const processAudio = useCallback(async (audioBlob: Blob) => {
     setState((prev) => ({ ...prev, isProcessing: true }));
     
-    // Simulate ASR processing
-    await new Promise((r) => setTimeout(r, 2000));
-    
-    // Simulated transcription
-    const extractedText = "What is the probability of getting heads twice when flipping a fair coin two times?";
-    
-    setState((prev) => ({
-      ...prev,
-      extractedText,
-      isProcessing: false,
-    }));
+    try {
+      // Convert audio to base64
+      const reader = new FileReader();
+      const audioBase64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(audioBlob);
+      });
+
+      // Call ASR edge function
+      const { data, error } = await supabase.functions.invoke('asr-transcribe', {
+        body: { audioBase64 }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      const extractedText = data.extractedText || '';
+      
+      setState((prev) => ({
+        ...prev,
+        extractedText,
+        isProcessing: false,
+      }));
+
+      toast({
+        title: "Audio processed",
+        description: "Speech transcribed. Review and confirm.",
+      });
+    } catch (error) {
+      console.error('ASR error:', error);
+      toast({
+        title: "Transcription Failed",
+        description: "Could not transcribe audio. Please try again.",
+        variant: "destructive",
+      });
+      setState((prev) => ({ ...prev, isProcessing: false }));
+    }
   }, []);
 
   const confirmExtraction = useCallback((text: string) => {
