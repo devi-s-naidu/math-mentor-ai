@@ -7,20 +7,38 @@ const corsHeaders = {
 };
 
 // Process base64 in chunks to prevent memory issues
-function base64ToBlob(base64String: string, mimeType: string): Blob {
+function processBase64Chunks(base64String: string, chunkSize = 32768): Uint8Array {
   // Remove data URL prefix if present
   const base64Data = base64String.includes(',') 
     ? base64String.split(',')[1] 
     : base64String;
   
-  const binaryString = atob(base64Data);
-  const bytes = new Uint8Array(binaryString.length);
+  const chunks: Uint8Array[] = [];
+  let position = 0;
   
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  while (position < base64Data.length) {
+    const chunk = base64Data.slice(position, position + chunkSize);
+    const binaryChunk = atob(chunk);
+    const bytes = new Uint8Array(binaryChunk.length);
+    
+    for (let i = 0; i < binaryChunk.length; i++) {
+      bytes[i] = binaryChunk.charCodeAt(i);
+    }
+    
+    chunks.push(bytes);
+    position += chunkSize;
   }
-  
-  return new Blob([bytes], { type: mimeType });
+
+  const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return result;
 }
 
 serve(async (req) => {
@@ -36,83 +54,68 @@ serve(async (req) => {
       throw new Error('No audio data provided');
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY not configured');
     }
 
-    console.log('Processing ASR request...');
+    console.log('Processing ASR request with Whisper...');
 
-    // For audio transcription, we'll use a text-based approach
-    // Since Lovable AI gateway supports multimodal, we describe what we need
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    // Convert base64 to binary
+    const binaryAudio = processBase64Chunks(audioBase64);
+    
+    // Prepare form data for Whisper API
+    const formData = new FormData();
+    const arrayBuffer = binaryAudio.buffer.slice(binaryAudio.byteOffset, binaryAudio.byteOffset + binaryAudio.byteLength) as ArrayBuffer;
+    const blob = new Blob([arrayBuffer], { type: 'audio/webm' });
+    formData.append('file', blob, 'audio.webm');
+    formData.append('file', blob, 'audio.webm');
+    formData.append('model', 'whisper-1');
+    formData.append('prompt', 'This is a mathematical problem. Convert spoken math to notation: squared means ², cubed means ³, square root means √, pi means π.');
+
+    // Send to OpenAI Whisper
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
       },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a speech-to-text specialist for mathematical problems. When given audio content, transcribe it accurately.
-
-Rules:
-1. Convert spoken mathematical expressions to proper notation
-2. "x squared" → x²
-3. "x cubed" → x³
-4. "square root of" → √
-5. "integral of" → ∫
-6. "sum of" → Σ
-7. "pi" → π
-8. "theta" → θ
-9. "derivative of f of x" → f'(x) or df/dx
-10. Keep the mathematical meaning clear and precise`
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Transcribe this audio of a mathematical problem. Convert spoken math to proper notation. Return only the transcribed problem text.'
-              },
-              {
-                type: 'input_audio',
-                input_audio: {
-                  data: audioBase64.includes(',') ? audioBase64.split(',')[1] : audioBase64,
-                  format: 'webm'
-                }
-              }
-            ]
-          }
-        ],
-        max_tokens: 500,
-      }),
+      body: formData,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('AI API error:', errorText);
-      
-      // Fallback: return a helpful message if audio processing fails
-      return new Response(JSON.stringify({ 
-        extractedText: 'Audio transcription is not fully supported yet. Please use text or image input.',
-        confidence: 0.5,
-        error: 'Audio processing limited'
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      console.error('OpenAI Whisper API error:', response.status, errorText);
+      throw new Error(`Whisper API error: ${response.status}`);
     }
 
-    const data = await response.json();
-    const extractedText = data.choices?.[0]?.message?.content?.trim() || '';
+    const result = await response.json();
+    let extractedText = result.text || '';
 
-    console.log('ASR transcription successful:', extractedText.substring(0, 100));
+    console.log('Raw transcription:', extractedText);
+
+    // Post-process to convert spoken math to notation
+    extractedText = extractedText
+      .replace(/\bsquared\b/gi, '²')
+      .replace(/\bcubed\b/gi, '³')
+      .replace(/\bsquare root of\b/gi, '√')
+      .replace(/\bsqrt of\b/gi, '√')
+      .replace(/\bto the power of (\d+)\b/gi, '^$1')
+      .replace(/\bpi\b/gi, 'π')
+      .replace(/\btheta\b/gi, 'θ')
+      .replace(/\balpha\b/gi, 'α')
+      .replace(/\bbeta\b/gi, 'β')
+      .replace(/\bintegral of\b/gi, '∫')
+      .replace(/\bsum of\b/gi, 'Σ')
+      .replace(/\binfinity\b/gi, '∞')
+      .replace(/\bdelta\b/gi, 'Δ')
+      .replace(/\bx squared\b/gi, 'x²')
+      .replace(/\bx cubed\b/gi, 'x³');
+
+    console.log('ASR transcription successful:', extractedText);
 
     return new Response(JSON.stringify({ 
       extractedText,
-      confidence: 0.85
+      confidence: 0.95
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -122,7 +125,7 @@ Rules:
     console.error('Error in ASR function:', error);
     return new Response(JSON.stringify({ 
       error: errorMessage,
-      extractedText: 'Audio transcription failed. Please try text or image input.',
+      extractedText: '',
       confidence: 0 
     }), {
       status: 500,
