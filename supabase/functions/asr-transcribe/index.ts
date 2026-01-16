@@ -2,170 +2,189 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
+
+function parseDataUrl(dataUrl: string): { mimeType: string; bytes: Uint8Array } {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    // If it's just base64 without a data URL prefix, we can't reliably infer MIME type.
+    // Default to webm since that's what browsers commonly produce for MediaRecorder.
+    const mimeType = "audio/webm";
+    const b64 = dataUrl;
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return { mimeType, bytes };
+  }
+
+  const mimeType = match[1];
+  const b64 = match[2];
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return { mimeType, bytes };
+}
+
+function mimeToExtension(mimeType: string): string {
+  const mt = mimeType.toLowerCase();
+  if (mt.includes("webm")) return "webm";
+  if (mt.includes("ogg")) return "ogg";
+  if (mt.includes("wav")) return "wav";
+  if (mt.includes("mpeg") || mt.includes("mp3")) return "mp3";
+  if (mt.includes("mp4")) return "mp4";
+  if (mt.includes("m4a")) return "m4a";
+  return "bin";
+}
+
+function postProcessMathNotation(text: string): string {
+  return text
+    .replace(/\bsquared\b/gi, "²")
+    .replace(/\bcubed\b/gi, "³")
+    .replace(/\bsquare root of\b/gi, "√")
+    .replace(/\bsqrt of\b/gi, "√")
+    .replace(/\bto the power of (\d+)\b/gi, "^$1")
+    .replace(/\bpi\b/gi, "π")
+    .replace(/\btheta\b/gi, "θ")
+    .replace(/\balpha\b/gi, "α")
+    .replace(/\bbeta\b/gi, "β")
+    .replace(/\bintegral of\b/gi, "∫")
+    .replace(/\bsum of\b/gi, "Σ")
+    .replace(/\binfinity\b/gi, "∞")
+    .replace(/\bdelta\b/gi, "Δ");
+}
 
 serve(async (req) => {
   // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const { audioBase64 } = await req.json();
 
-    if (!audioBase64) {
-      throw new Error('No audio data provided');
+    if (!audioBase64 || typeof audioBase64 !== "string") {
+      return new Response(
+        JSON.stringify({
+          error: "No audio data provided",
+          extractedText: "",
+          confidence: 0,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
+      return new Response(
+        JSON.stringify({
+          error: "OPENAI_API_KEY not configured",
+          extractedText: "",
+          confidence: 0,
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
-    console.log('Processing ASR request with Lovable AI...');
+    console.log("Processing ASR request with OpenAI transcription API...");
 
-    // Extract base64 data without the data URL prefix
-    const base64Data = audioBase64.includes(',') 
-      ? audioBase64.split(',')[1] 
-      : audioBase64;
-    
-    // Detect format from data URL
-    let format = 'mp3'; // default
-    if (audioBase64.includes('audio/wav')) {
-      format = 'wav';
-    } else if (audioBase64.includes('audio/mp3') || audioBase64.includes('audio/mpeg')) {
-      format = 'mp3';
-    }
-    // Note: webm is not supported, but we'll try mp3 as it might work for some cases
+    const { mimeType, bytes } = parseDataUrl(audioBase64);
+    const ext = mimeToExtension(mimeType);
 
-    console.log('Audio format detected:', format);
+    console.log("Audio mimeType:", mimeType, "ext:", ext, "bytes:", bytes.length);
 
-    // Use GPT-5 which supports audio input
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
+    const file = new File([bytes.buffer as ArrayBuffer], `audio.${ext}`, { type: mimeType });
+    const form = new FormData();
+    form.append("file", file);
+    form.append("model", "whisper-1");
+
+    // Optional: helps math / symbols slightly in some cases
+    form.append(
+      "prompt",
+      "Transcribe mathematical expressions accurately. Use symbols like + - * / =, √, π when appropriate.",
+    );
+
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
-      body: JSON.stringify({
-        model: 'openai/gpt-5',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a speech-to-text transcription specialist for mathematical problems.
-
-Your task: Transcribe the spoken audio EXACTLY as heard, then convert spoken math terms to proper notation.
-
-Conversion rules:
-- "squared" → ²
-- "cubed" → ³  
-- "square root of" → √
-- "to the power of [n]" → ^n
-- "pi" → π
-- "theta" → θ
-- "integral of" → ∫
-- "sum of" → Σ
-- "infinity" → ∞
-- "delta" → Δ
-- "plus" → +
-- "minus" → -
-- "times" or "multiplied by" → ×
-- "divided by" → ÷
-- "equals" → =
-
-Return ONLY the transcribed and converted mathematical problem text. No explanations.`
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Transcribe this audio recording of a mathematical problem. Apply the conversion rules for math notation.'
-              },
-              {
-                type: 'input_audio',
-                input_audio: {
-                  data: base64Data,
-                  format: format
-                }
-              }
-            ]
-          }
-        ],
-        max_completion_tokens: 500,
-      }),
+      body: form,
     });
+
+    const raw = await response.text();
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Lovable AI API error:', response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ 
-          error: 'Rate limit exceeded. Please wait a moment and try again.',
-          extractedText: '',
-          confidence: 0 
-        }), {
-          status: 429,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      
-      // If audio format is not supported, provide a helpful message
-      if (response.status === 400 && errorText.includes('format')) {
-        return new Response(JSON.stringify({ 
-          error: 'Audio format not supported. Please try using text or image input instead.',
-          extractedText: '',
-          confidence: 0 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      
-      throw new Error(`AI API error: ${response.status}`);
+      console.error("OpenAI transcription error:", response.status, raw);
+
+      // Pass through the upstream status so the client sees the real cause (429 quota, 400 bad audio, etc.)
+      return new Response(
+        JSON.stringify({
+          error: `Transcription API error: ${response.status}`,
+          details: raw,
+          extractedText: "",
+          confidence: 0,
+        }),
+        {
+          status: response.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
-    const data = await response.json();
-    let extractedText = data.choices?.[0]?.message?.content?.trim() || '';
+    let extractedText = "";
+    try {
+      const json = JSON.parse(raw);
+      extractedText = (json?.text ?? "").toString().trim();
+    } catch (e) {
+      console.error("Failed to parse transcription JSON:", e);
+      return new Response(
+        JSON.stringify({
+          error: "Failed to parse transcription response",
+          extractedText: "",
+          confidence: 0,
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
 
-    console.log('ASR transcription successful:', extractedText);
+    extractedText = postProcessMathNotation(extractedText);
 
-    // Additional post-processing for common patterns
-    extractedText = extractedText
-      .replace(/\bsquared\b/gi, '²')
-      .replace(/\bcubed\b/gi, '³')
-      .replace(/\bsquare root of\b/gi, '√')
-      .replace(/\bsqrt of\b/gi, '√')
-      .replace(/\bto the power of (\d+)\b/gi, '^$1')
-      .replace(/\bpi\b/gi, 'π')
-      .replace(/\btheta\b/gi, 'θ')
-      .replace(/\balpha\b/gi, 'α')
-      .replace(/\bbeta\b/gi, 'β')
-      .replace(/\bintegral of\b/gi, '∫')
-      .replace(/\bsum of\b/gi, 'Σ')
-      .replace(/\binfinity\b/gi, '∞')
-      .replace(/\bdelta\b/gi, 'Δ');
+    console.log("ASR transcription successful:", extractedText);
 
-    return new Response(JSON.stringify({ 
-      extractedText,
-      confidence: 0.90
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-
+    return new Response(
+      JSON.stringify({
+        extractedText,
+        confidence: 0.9,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Error in ASR function:', error);
-    return new Response(JSON.stringify({ 
-      error: errorMessage,
-      extractedText: '',
-      confidence: 0 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Error in ASR function:", error);
+    return new Response(
+      JSON.stringify({
+        error: errorMessage,
+        extractedText: "",
+        confidence: 0,
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
