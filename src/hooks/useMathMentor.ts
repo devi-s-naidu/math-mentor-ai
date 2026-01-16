@@ -20,16 +20,6 @@ const initialAgents: AgentState[] = [
   { type: "explainer", status: "idle" },
 ];
 
-// Simulated knowledge base for RAG
-const knowledgeBase = [
-  "For probability of independent events: P(A ∩ B) = P(A) × P(B)",
-  "Derivative power rule: d/dx[x^n] = n × x^(n-1)",
-  "Quadratic formula: x = (-b ± √(b²-4ac)) / 2a",
-  "L'Hôpital's Rule: lim[f(x)/g(x)] = lim[f'(x)/g'(x)] when 0/0 or ∞/∞",
-  "Chain rule: d/dx[f(g(x))] = f'(g(x)) × g'(x)",
-  "Integration by parts: ∫u dv = uv - ∫v du",
-  "Matrix multiplication: (AB)ij = Σk(Aik × Bkj)",
-];
 
 export function useMathMentor() {
   const [state, setState] = useState<AppState>({
@@ -76,42 +66,67 @@ export function useMathMentor() {
 
     try {
       // Parser Agent
-      await simulateAgentRun("parser", 800, "Parsing input into structured format");
+      await simulateAgentRun("parser", 600, "Parsing input into structured format");
       
       const parsedProblem: ParsedProblem = detectProblemType(input);
       setState((prev) => ({ ...prev, parsedProblem }));
 
       // Router Agent
-      await simulateAgentRun("router", 500, `Routing to ${parsedProblem.topic} solver`);
+      await simulateAgentRun("router", 400, `Routing to ${parsedProblem.topic} solver`);
 
-      // Solver Agent with RAG
-      updateAgent("solver", { status: "running", startTime: Date.now(), message: "Retrieving relevant knowledge..." });
-      await new Promise((r) => setTimeout(r, 600));
+      // Solver Agent - Call real AI
+      updateAgent("solver", { status: "running", startTime: Date.now(), message: "Calling AI solver..." });
       
-      const retrievedContext = retrieveContext(parsedProblem.topic);
-      updateAgent("solver", { message: "Applying solution strategy..." });
-      await new Promise((r) => setTimeout(r, 800));
+      const { data, error } = await supabase.functions.invoke('math-solver', {
+        body: { problemText: input, topic: parsedProblem.topic }
+      });
+
+      if (error) {
+        updateAgent("solver", { status: "error", message: error.message });
+        throw new Error(error.message);
+      }
+
+      if (data.error) {
+        updateAgent("solver", { status: "error", message: data.error });
+        throw new Error(data.error);
+      }
+
       updateAgent("solver", { status: "completed", endTime: Date.now(), message: "Solution found" });
 
       // Verifier Agent
-      await simulateAgentRun("verifier", 700, "Verifying solution correctness");
+      const verificationMsg = data.verificationStatus === 'verified' 
+        ? "Solution verified ✓" 
+        : data.verificationStatus === 'uncertain'
+        ? "Solution needs review"
+        : "Verification failed";
+      await simulateAgentRun("verifier", 300, verificationMsg);
 
       // Explainer Agent
-      await simulateAgentRun("explainer", 600, "Generating step-by-step explanation");
+      await simulateAgentRun("explainer", 300, "Explanation ready");
 
-      // Generate solution
-      const solution = generateSolution(parsedProblem, retrievedContext);
+      // Set the solution from AI
+      const solution: Solution = {
+        steps: data.steps || [],
+        finalAnswer: data.finalAnswer || "See steps above",
+        confidence: data.confidence || 0.85,
+        retrievedContext: data.retrievedContext || [],
+        verificationStatus: data.verificationStatus || "uncertain",
+        explanation: data.explanation || "Solution provided by AI.",
+      };
+      
       setState((prev) => ({ ...prev, solution }));
 
       toast({
         title: "Problem Solved!",
-        description: "Check the solution below.",
+        description: "AI has solved your problem. Check the solution below.",
       });
 
     } catch (error) {
+      console.error('Solver error:', error);
+      updateAgent("solver", { status: "error", message: "Failed to solve" });
       toast({
         title: "Error",
-        description: "Failed to solve the problem. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to solve the problem. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -346,92 +361,3 @@ function detectProblemType(input: string): ParsedProblem {
   };
 }
 
-function retrieveContext(topic: string): string[] {
-  return knowledgeBase.filter((kb) => {
-    const lower = kb.toLowerCase();
-    switch (topic) {
-      case "probability":
-        return lower.includes("probability");
-      case "calculus":
-        return lower.includes("derivative") || lower.includes("limit") || lower.includes("integral");
-      case "algebra":
-        return lower.includes("quadratic") || lower.includes("equation");
-      default:
-        return true;
-    }
-  }).slice(0, 3);
-}
-
-function generateSolution(problem: ParsedProblem, retrievedContext: string[]): Solution {
-  // Demo solutions based on topic
-  const solutions: Record<string, Solution> = {
-    probability: {
-      steps: [
-        { stepNumber: 1, description: "Identify the events and their probabilities", formula: "P(A) and P(B) given" },
-        { stepNumber: 2, description: "Apply the multiplication rule for independent events", formula: "P(A ∩ B) = P(A) × P(B)" },
-        { stepNumber: 3, description: "Substitute the values", formula: "P(A ∩ B) = 0.3 × 0.5", result: "0.15" },
-      ],
-      finalAnswer: "P(A ∩ B) = 0.15",
-      confidence: 0.95,
-      retrievedContext,
-      verificationStatus: "verified",
-      explanation: "For independent events, the probability of both occurring is the product of their individual probabilities. Since A and B are independent, we simply multiply P(A) = 0.3 by P(B) = 0.5 to get 0.15.",
-    },
-    calculus: {
-      steps: [
-        { stepNumber: 1, description: "Identify the function to differentiate", formula: "f(x) = x³ + 2x² - 5x + 3" },
-        { stepNumber: 2, description: "Apply the power rule to each term", formula: "d/dx[xⁿ] = n·xⁿ⁻¹" },
-        { stepNumber: 3, description: "Differentiate x³", formula: "d/dx[x³] = 3x²" },
-        { stepNumber: 4, description: "Differentiate 2x²", formula: "d/dx[2x²] = 4x" },
-        { stepNumber: 5, description: "Differentiate -5x", formula: "d/dx[-5x] = -5" },
-        { stepNumber: 6, description: "Constant term derivative is 0", formula: "d/dx[3] = 0" },
-        { stepNumber: 7, description: "Combine all terms", result: "f'(x) = 3x² + 4x - 5" },
-      ],
-      finalAnswer: "f'(x) = 3x² + 4x - 5",
-      confidence: 0.98,
-      retrievedContext,
-      verificationStatus: "verified",
-      explanation: "Using the power rule, we differentiate each term separately. For x³, bring down the exponent (3) and reduce it by 1, giving 3x². For 2x², we get 4x. For -5x, the derivative is -5. The constant 3 has a derivative of 0.",
-    },
-    algebra: {
-      steps: [
-        { stepNumber: 1, description: "Identify the quadratic equation", formula: "2x² - 5x + 3 = 0" },
-        { stepNumber: 2, description: "Identify coefficients: a = 2, b = -5, c = 3" },
-        { stepNumber: 3, description: "Calculate discriminant", formula: "Δ = b² - 4ac = 25 - 24 = 1" },
-        { stepNumber: 4, description: "Apply quadratic formula", formula: "x = (5 ± √1) / 4" },
-        { stepNumber: 5, description: "Calculate both solutions", result: "x₁ = 3/2, x₂ = 1" },
-      ],
-      finalAnswer: "x = 3/2 or x = 1",
-      confidence: 0.97,
-      retrievedContext,
-      verificationStatus: "verified",
-      explanation: "This is a standard quadratic equation. We use the quadratic formula with a=2, b=-5, and c=3. The discriminant is positive (Δ=1), indicating two real solutions.",
-    },
-    "linear-algebra": {
-      steps: [
-        { stepNumber: 1, description: "Set up the problem in matrix form" },
-        { stepNumber: 2, description: "Apply appropriate matrix operations" },
-        { stepNumber: 3, description: "Calculate the result" },
-      ],
-      finalAnswer: "See detailed solution",
-      confidence: 0.85,
-      retrievedContext,
-      verificationStatus: "verified",
-      explanation: "Linear algebra problems require careful matrix manipulation. The solution involves standard operations.",
-    },
-    unknown: {
-      steps: [
-        { stepNumber: 1, description: "Analyze the problem structure" },
-        { stepNumber: 2, description: "Apply general mathematical principles" },
-        { stepNumber: 3, description: "Derive the solution" },
-      ],
-      finalAnswer: "Solution derived",
-      confidence: 0.75,
-      retrievedContext,
-      verificationStatus: "uncertain",
-      explanation: "The problem type was not clearly identified. Please verify the solution manually.",
-    },
-  };
-
-  return solutions[problem.topic] || solutions.unknown;
-}
