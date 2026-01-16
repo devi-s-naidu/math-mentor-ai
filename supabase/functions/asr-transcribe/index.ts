@@ -30,6 +30,17 @@ serve(async (req) => {
     const base64Data = audioBase64.includes(',') 
       ? audioBase64.split(',')[1] 
       : audioBase64;
+    
+    // Detect format from data URL
+    let format = 'mp3'; // default
+    if (audioBase64.includes('audio/wav')) {
+      format = 'wav';
+    } else if (audioBase64.includes('audio/mp3') || audioBase64.includes('audio/mpeg')) {
+      format = 'mp3';
+    }
+    // Note: webm is not supported, but we'll try mp3 as it might work for some cases
+
+    console.log('Audio format detected:', format);
 
     // Use GPT-5 which supports audio input
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -77,7 +88,7 @@ Return ONLY the transcribed and converted mathematical problem text. No explanat
                 type: 'input_audio',
                 input_audio: {
                   data: base64Data,
-                  format: 'webm'
+                  format: format
                 }
               }
             ]
@@ -98,6 +109,18 @@ Return ONLY the transcribed and converted mathematical problem text. No explanat
           confidence: 0 
         }), {
           status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // If audio format is not supported, provide a helpful message
+      if (response.status === 400 && errorText.includes('format')) {
+        return new Response(JSON.stringify({ 
+          error: 'Audio format not supported. Please try using text or image input instead.',
+          extractedText: '',
+          confidence: 0 
+        }), {
+          status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
