@@ -1,10 +1,1 @@
 project_id = "nsfiwlomlvkfwmgqmcms"
-
-[functions.math-solver]
-verify_jwt = false
-
-[functions.asr-transcribe]
-verify_jwt = false
-
-[functions.ocr-extract]
-verify_jwt = false
